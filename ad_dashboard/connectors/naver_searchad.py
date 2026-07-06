@@ -19,7 +19,8 @@ from datetime import date, timedelta
 import requests
 
 from core import settings
-from core.models import CampaignSpec, Channel, DailyMetric, LaunchResult
+from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
+                         LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 BASE_URL = "https://api.searchad.naver.com"
@@ -103,6 +104,35 @@ class NaverSearchAdConnector(AdPlatformConnector):
                 })
             return LaunchResult(channel=self.channel, ok=True, campaign_id=campaign_id,
                                 message="캠페인/광고그룹/키워드/소재 생성 완료")
+        except (ConnectorError, requests.RequestException, KeyError) as e:
+            return LaunchResult(channel=self.channel, ok=False, message=str(e))
+
+    # -- 소재 변경 -----------------------------------------------------------
+    def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
+        """캠페인의 모든 광고그룹에 새 텍스트 소재를 등록한다."""
+        if not self.is_configured():
+            return self._not_configured()
+        try:
+            adgroups = self._request("GET", "/ncc/adgroups",
+                                     params={"nccCampaignId": campaign_id}) or []
+            if not adgroups:
+                return LaunchResult(channel=self.channel, ok=False,
+                                    message="광고그룹이 없습니다")
+            for g in adgroups:
+                self._request("POST", "/ncc/ads", json={
+                    "nccAdgroupId": g["nccAdgroupId"],
+                    "type": "TEXT_45",
+                    "ad": {
+                        "headline": creative.headline[:15],
+                        "description": creative.description[:45],
+                        "pc": {"final": creative.landing_url},
+                        "mobile": {"final": creative.landing_url},
+                    },
+                })
+            return LaunchResult(
+                channel=self.channel, ok=True, campaign_id=campaign_id,
+                message=f"광고그룹 {len(adgroups)}개에 새 소재 등록 완료 "
+                        "(기존 소재는 관리자에서 중지하세요)")
         except (ConnectorError, requests.RequestException, KeyError) as e:
             return LaunchResult(channel=self.channel, ok=False, message=str(e))
 

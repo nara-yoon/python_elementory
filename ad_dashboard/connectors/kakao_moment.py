@@ -13,7 +13,8 @@ from datetime import date
 import requests
 
 from core import settings
-from core.models import CampaignSpec, Channel, DailyMetric, LaunchResult
+from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
+                         LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 BASE_URL = "https://apis.moment.kakao.com"
@@ -83,6 +84,33 @@ class KakaoMomentConnector(AdPlatformConnector):
                 })
             return LaunchResult(channel=self.channel, ok=True, campaign_id=campaign_id,
                                 message="캠페인/그룹/소재 생성 완료")
+        except (ConnectorError, requests.RequestException, KeyError) as e:
+            return LaunchResult(channel=self.channel, ok=False, message=str(e))
+
+    def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
+        """캠페인의 모든 광고그룹에 새 이미지 소재를 등록한다."""
+        if not self.is_configured():
+            return self._not_configured()
+        try:
+            adgroups = self._request("GET", "/openapi/v4/adGroups",
+                                     params={"campaignId": campaign_id}) or {}
+            content = adgroups.get("content",
+                                   adgroups if isinstance(adgroups, list) else [])
+            if not content:
+                return LaunchResult(channel=self.channel, ok=False,
+                                    message="광고그룹이 없습니다")
+            for g in content:
+                self._request("POST", "/openapi/v4/creatives", json={
+                    "adGroupId": str(g["id"]),
+                    "format": "IMAGE_NATIVE",
+                    "title": creative.headline,
+                    "description": creative.description,
+                    "landingUrl": creative.landing_url,
+                    "image": {"url": creative.image_url},
+                })
+            return LaunchResult(
+                channel=self.channel, ok=True, campaign_id=campaign_id,
+                message=f"광고그룹 {len(content)}개에 새 소재 등록 완료")
         except (ConnectorError, requests.RequestException, KeyError) as e:
             return LaunchResult(channel=self.channel, ok=False, message=str(e))
 

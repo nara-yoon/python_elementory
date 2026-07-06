@@ -15,7 +15,8 @@ from datetime import date
 import requests
 
 from core import settings
-from core.models import CampaignSpec, Channel, DailyMetric, LaunchResult
+from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
+                         LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 GRAPH_URL = "https://graph.facebook.com/v21.0"
@@ -107,6 +108,47 @@ class MetaAdsConnector(AdPlatformConnector):
                 msg = "캠페인/광고세트/소재/광고 생성 완료 (일시중지 상태)"
             return LaunchResult(channel=self.channel, ok=True,
                                 campaign_id=campaign_id, message=msg)
+        except (ConnectorError, requests.RequestException, KeyError) as e:
+            return LaunchResult(channel=self.channel, ok=False, message=str(e))
+
+    def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
+        """캠페인의 모든 광고세트에 새 크리에이티브 + 광고를 등록한다."""
+        if not self.is_configured():
+            return self._not_configured()
+        if not self.page_id:
+            return LaunchResult(channel=self.channel, ok=False,
+                                message="META_PAGE_ID 가 필요합니다 (.env)")
+        try:
+            act = f"/act_{self.account_id}"
+            adsets = self._request("GET", f"{act}/adsets", params={
+                "campaign_id": campaign_id, "fields": "id,name", "limit": 100,
+            }).get("data", [])
+            if not adsets:
+                return LaunchResult(channel=self.channel, ok=False,
+                                    message="광고세트가 없습니다")
+            new_creative = self._request("POST", f"{act}/adcreatives", data={
+                "name": f"{creative.headline}_소재",
+                "object_story_spec": json.dumps({
+                    "page_id": self.page_id,
+                    "link_data": {
+                        "link": creative.landing_url,
+                        "message": creative.description,
+                        "name": creative.headline,
+                        **({"picture": creative.image_url}
+                           if creative.image_url else {}),
+                    },
+                }, ensure_ascii=False),
+            })
+            for adset in adsets:
+                self._request("POST", f"{act}/ads", data={
+                    "name": f"{creative.headline}_광고",
+                    "adset_id": adset["id"],
+                    "creative": json.dumps({"creative_id": new_creative["id"]}),
+                    "status": "PAUSED",
+                })
+            return LaunchResult(
+                channel=self.channel, ok=True, campaign_id=campaign_id,
+                message=f"광고세트 {len(adsets)}개에 새 소재 등록 완료 (일시중지 상태)")
         except (ConnectorError, requests.RequestException, KeyError) as e:
             return LaunchResult(channel=self.channel, ok=False, message=str(e))
 

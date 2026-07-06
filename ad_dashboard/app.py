@@ -18,7 +18,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from core import campaign_launcher, collector, storage
+from core import bulk_ops, campaign_launcher, collector, storage
 from core.models import CHANNEL_LABELS, CHANNEL_PLATFORMS, CampaignSpec, Channel
 
 # ---------------------------------------------------------------- 팔레트
@@ -467,6 +467,79 @@ with tab_launch:
             else:
                 st.write(f"❌ **{label}** — {r.message}")
         load_all.clear()
+
+    st.divider()
+    st.subheader("대량 작업 (CSV)")
+    st.caption("CSV 한 장으로 여러 캠페인을 한 번에 등록하거나, 여러 캠페인의 소재를 "
+               "일괄 교체합니다. 엑셀에서 편집한 CSV(UTF-8) 그대로 올리면 됩니다.")
+
+    def _show_bulk_results(rows) -> None:
+        total = sum(len(r.results) for r in rows)
+        ok = sum(1 for row in rows for r in row.results if r.ok)
+        (st.success if ok == total else st.warning)(f"{total}건 중 {ok}건 성공")
+        for row in rows:
+            for r in row.results:
+                label = CHANNEL_LABELS.get(r.channel, r.channel)
+                icon = "✅" if r.ok else "❌"
+                st.write(f"{icon} [행 {row.row}] **{label}** · "
+                         f"`{r.campaign_id or '-'}` — {r.message}")
+
+    config_dir = Path(__file__).resolve().parent / "config"
+
+    with st.expander("📦 캠페인 대량 등록 — 행 1개 = 캠페인 1개, 채널은 | 로 구분"):
+        st.download_button(
+            "샘플 CSV 내려받기",
+            data=(config_dir / "bulk_campaigns_sample.csv").read_bytes(),
+            file_name="bulk_campaigns_sample.csv", mime="text/csv",
+            key="dl_bulk_campaigns")
+        up = st.file_uploader("캠페인 CSV 업로드", type="csv", key="up_bulk_campaigns")
+        if up is not None:
+            df_up = pd.read_csv(up, dtype=str).fillna("")
+            missing = bulk_ops.validate_columns(df_up, bulk_ops.CAMPAIGN_REQUIRED)
+            if missing:
+                st.error(f"필수 컬럼이 없습니다: {', '.join(missing)}")
+            else:
+                st.dataframe(df_up, use_container_width=True, hide_index=True)
+                n_jobs = sum(len(str(ch).split("|")) for ch in df_up["channels"])
+                if st.button(f"🚀 캠페인 {len(df_up)}개 → 총 {n_jobs}건 등록 실행",
+                             type="primary", key="btn_bulk_launch"):
+                    _show_bulk_results(bulk_ops.bulk_launch(df_up))
+                    load_all.clear()
+
+    with st.expander("🎨 소재 대량 변경 — 행 1개 = (채널, 캠페인 ID) 1건"):
+        st.download_button(
+            "샘플 CSV 내려받기",
+            data=(config_dir / "bulk_creatives_sample.csv").read_bytes(),
+            file_name="bulk_creatives_sample.csv", mime="text/csv",
+            key="dl_bulk_creatives")
+        st.caption("캠페인 ID는 아래 '세팅된 캠페인' 표 또는 각 광고관리자에서 확인하세요. "
+                   "대부분의 플랫폼은 소재 '수정' 대신 새 소재를 등록하는 방식이라, "
+                   "기존 소재는 확인 후 각 관리자에서 중지하면 됩니다.")
+        up2 = st.file_uploader("소재 CSV 업로드", type="csv", key="up_bulk_creatives")
+        if up2 is not None:
+            df_up2 = pd.read_csv(up2, dtype=str).fillna("")
+            missing = bulk_ops.validate_columns(df_up2, bulk_ops.CREATIVE_REQUIRED)
+            if missing:
+                st.error(f"필수 컬럼이 없습니다: {', '.join(missing)}")
+            else:
+                st.dataframe(df_up2, use_container_width=True, hide_index=True)
+                if st.button(f"🎨 소재 변경 {len(df_up2)}건 실행",
+                             type="primary", key="btn_bulk_creative"):
+                    _show_bulk_results(bulk_ops.bulk_update_creatives(df_up2))
+
+        _conn = storage.connect()
+        history = storage.load_creative_updates(_conn)
+        _conn.close()
+        if not history.empty:
+            st.markdown("**소재 변경 이력**")
+            history["채널"] = history["channel"].map(CHANNEL_LABELS)
+            st.dataframe(
+                history[["created_at", "채널", "campaign_id", "headline",
+                         "status", "message"]]
+                .rename(columns={"created_at": "시각", "campaign_id": "캠페인 ID",
+                                 "headline": "소재 제목", "status": "결과",
+                                 "message": "상세"}),
+                use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("세팅된 캠페인")

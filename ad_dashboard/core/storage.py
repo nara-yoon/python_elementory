@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS clarity_daily (
     script_errors INTEGER DEFAULT 0,
     avg_scroll_depth REAL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS creative_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    headline TEXT DEFAULT '',
+    status TEXT DEFAULT '',
+    message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
 CREATE TABLE IF NOT EXISTS campaigns (
     channel TEXT NOT NULL,
     campaign_id TEXT NOT NULL,
@@ -135,6 +144,22 @@ def save_campaign(conn: sqlite3.Connection, channel: str, campaign_id: str,
         (channel, campaign_id, campaign_name, daily_budget, status),
     )
     conn.commit()
+
+
+def save_creative_update(conn: sqlite3.Connection, channel: str, campaign_id: str,
+                         headline: str, status: str, message: str) -> None:
+    conn.execute(
+        """INSERT INTO creative_updates (channel, campaign_id, headline, status, message)
+           VALUES (?, ?, ?, ?, ?)""",
+        (channel, campaign_id, headline, status, message),
+    )
+    conn.commit()
+
+
+def load_creative_updates(conn: sqlite3.Connection) -> pd.DataFrame:
+    return pd.read_sql_query(
+        "SELECT * FROM creative_updates ORDER BY created_at DESC", conn
+    )
 
 
 def load_metrics(conn: sqlite3.Connection) -> pd.DataFrame:

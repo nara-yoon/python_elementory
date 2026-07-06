@@ -1,0 +1,8 @@
+channel,campaign_id,headline,description,image_url,landing_url
+naver_search,demo_naver_search_1,추석 특별 기획전,명절 선물 최대 40% 할인,,https://example.com/chuseok
+kakao_search,demo_kakao_search_1,추석 특별 기획전,명절 선물 최대 40% 할인,,https://example.com/chuseok
+google_search,demo_google_search_1,추석 특별 기획전,명절 선물 최대 40% 할인,,https://example.com/chuseok
+naver_gfa,demo_naver_gfa_1,추석 선물 고민 끝,베스트 선물세트 모음전,https://example.com/assets/chuseok.jpg,https://example.com/chuseok
+kakao_moment,demo_kakao_moment_1,추석 선물 고민 끝,베스트 선물세트 모음전,https://example.com/assets/chuseok.jpg,https://example.com/chuseok
+google_gdn,demo_google_gdn_1,추석 선물 고민 끝,베스트 선물세트 모음전,https://example.com/assets/chuseok.jpg,https://example.com/chuseok
+meta,demo_meta_1,추석 선물 고민 끝,베스트 선물세트 모음전,https://example.com/assets/chuseok.jpg,https://example.com/chuseok

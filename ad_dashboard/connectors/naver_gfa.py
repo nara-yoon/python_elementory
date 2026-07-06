@@ -15,7 +15,8 @@ from datetime import date
 import requests
 
 from core import settings
-from core.models import CampaignSpec, Channel, DailyMetric, LaunchResult
+from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
+                         LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 DEFAULT_BASE_URL = "https://openapi.gfa.naver.com/v1"
@@ -75,6 +76,23 @@ class NaverGfaConnector(AdPlatformConnector):
             return LaunchResult(channel=self.channel, ok=True,
                                 campaign_id=str(data.get("campaignNo", "")),
                                 message="GFA 캠페인 생성 완료")
+        except (ConnectorError, requests.RequestException) as e:
+            return LaunchResult(channel=self.channel, ok=False, message=str(e))
+
+    def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
+        """캠페인에 새 소재를 등록한다 (GFA 승인 문서의 스키마에 맞춰 조정)."""
+        if not self.is_configured():
+            return self._not_configured()
+        try:
+            self._request("POST", f"/campaigns/{campaign_id}/creatives", json={
+                "accountNo": self.account_no,
+                "title": creative.headline,
+                "description": creative.description,
+                "imageUrl": creative.image_url,
+                "landingUrl": creative.landing_url,
+            })
+            return LaunchResult(channel=self.channel, ok=True, campaign_id=campaign_id,
+                                message="새 소재 등록 완료")
         except (ConnectorError, requests.RequestException) as e:
             return LaunchResult(channel=self.channel, ok=False, message=str(e))
 

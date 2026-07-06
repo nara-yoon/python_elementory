@@ -12,7 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date
 
-from core.models import CampaignSpec, DailyMetric, LaunchResult
+from core.models import CampaignSpec, CreativeSpec, DailyMetric, LaunchResult
 
 
 class ConnectorError(RuntimeError):
@@ -36,6 +36,15 @@ class AdPlatformConnector(ABC):
     @abstractmethod
     def fetch_daily_metrics(self, start: date, end: date) -> list[DailyMetric]:
         """기간 내 일자별 x 캠페인별 성과를 통합 스키마로 반환한다."""
+
+    def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
+        """캠페인 하위 광고그룹들에 새 소재를 등록한다(대량 소재 변경용).
+
+        대부분의 플랫폼은 소재 '수정' 대신 새 소재 등록 후 기존 소재를
+        중지하는 방식을 권장하므로, 기본 구현은 새 소재 추가다.
+        """
+        return LaunchResult(channel=self.channel, ok=False,
+                            message="이 채널은 소재 변경을 지원하지 않습니다")
 
     def _not_configured(self) -> LaunchResult:
         return LaunchResult(

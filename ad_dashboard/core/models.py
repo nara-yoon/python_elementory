@@ -144,6 +144,16 @@ class CampaignSpec:
 
 
 @dataclass
+class CreativeSpec:
+    """소재(광고 크리에이티브) 정의 — 대량 소재 변경 입력값."""
+
+    headline: str = ""
+    description: str = ""
+    image_url: str = ""
+    landing_url: str = ""
+
+
+@dataclass
 class LaunchResult:
     """캠페인 자동 세팅 결과(채널 1개당 1건)."""
 

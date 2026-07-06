@@ -18,7 +18,8 @@ from __future__ import annotations
 from datetime import date
 
 from core import settings
-from core.models import CampaignSpec, Channel, DailyMetric, LaunchResult
+from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
+                         LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 _REQUIRED = (
@@ -126,6 +127,60 @@ class GoogleAdsConnector(AdPlatformConnector):
         except ConnectorError as e:
             return LaunchResult(channel=self.channel, ok=False, message=str(e))
         except Exception as e:  # GoogleAdsException 포함
+            return LaunchResult(channel=self.channel, ok=False, message=str(e)[:500])
+
+    # -- 소재 변경 -----------------------------------------------------------
+    def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
+        """검색 캠페인의 모든 광고그룹에 새 반응형 검색광고(RSA)를 등록한다.
+
+        GDN 반응형 디스플레이 광고는 이미지 에셋 업로드가 선행돼야 하므로
+        여기서는 지원하지 않는다(구글 애즈 관리자에서 교체 권장).
+        """
+        if not self.is_configured():
+            return self._not_configured()
+        if self.network != "SEARCH":
+            return LaunchResult(
+                channel=self.channel, ok=False,
+                message="GDN 소재는 이미지 에셋 업로드가 필요해 API 일괄 변경을 "
+                        "지원하지 않습니다. 구글 애즈 관리자에서 교체하세요.")
+        try:
+            client = self._client()
+            ga_service = client.get_service("GoogleAdsService")
+            rows = ga_service.search(
+                customer_id=self.customer_id,
+                query=f"""SELECT ad_group.resource_name FROM ad_group
+                          WHERE campaign.id = {campaign_id}
+                            AND ad_group.status != 'REMOVED'""")
+            adgroup_resources = [r.ad_group.resource_name for r in rows]
+            if not adgroup_resources:
+                return LaunchResult(channel=self.channel, ok=False,
+                                    message="광고그룹이 없습니다")
+            ad_svc = client.get_service("AdGroupAdService")
+            ops = []
+            for resource in adgroup_resources:
+                op = client.get_type("AdGroupAdOperation")
+                ad_group_ad = op.create
+                ad_group_ad.ad_group = resource
+                ad_group_ad.status = client.enums.AdGroupAdStatusEnum.PAUSED
+                rsa = ad_group_ad.ad.responsive_search_ad
+                for text in (creative.headline[:30], creative.headline[:30] + " 안내",
+                             "공식 홈페이지"):
+                    h = client.get_type("AdTextAsset")
+                    h.text = text[:30]
+                    rsa.headlines.append(h)
+                for text in (creative.description[:90], "지금 바로 확인하세요"):
+                    d = client.get_type("AdTextAsset")
+                    d.text = text[:90]
+                    rsa.descriptions.append(d)
+                ad_group_ad.ad.final_urls.append(creative.landing_url)
+                ops.append(op)
+            ad_svc.mutate_ad_group_ads(customer_id=self.customer_id, operations=ops)
+            return LaunchResult(
+                channel=self.channel, ok=True, campaign_id=campaign_id,
+                message=f"광고그룹 {len(ops)}개에 새 RSA 등록 완료 (일시중지 상태)")
+        except ConnectorError as e:
+            return LaunchResult(channel=self.channel, ok=False, message=str(e))
+        except Exception as e:
             return LaunchResult(channel=self.channel, ok=False, message=str(e)[:500])
 
     # -- 성과 수집 -----------------------------------------------------------

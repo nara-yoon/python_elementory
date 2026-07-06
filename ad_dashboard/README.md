@@ -28,7 +28,7 @@ streamlit run app.py
 | **채널·캠페인 상세** | 채널 선택 후 캠페인 단위 성과표(CTR/CPC/CPA/ROAS)와 추이 |
 | **GA4 분석** | 세션·참여율·전환·매출, 소스/매체별 세션 추이와 성과표 |
 | **Clarity UX** | 데드 클릭·레이지 클릭·퀵백·스크립트 오류율 추이, 스크롤 깊이 — 랜딩페이지 품질 진단 |
-| **캠페인 자동 세팅** | 폼 입력 한 번으로 선택한 전 채널에 캠페인 생성 |
+| **캠페인 자동 세팅** | 폼 입력 한 번으로 선택한 전 채널에 캠페인 생성 + CSV 대량 등록/대량 소재 변경 |
 
 ## 실제 API 연동
 
@@ -57,6 +57,30 @@ streamlit run app.py
 | 메타 | [Meta for Developers](https://developers.facebook.com) → Marketing API | 시스템 사용자 토큰 권장 |
 | GA4 | GCP 서비스 계정 키 발급 후 GA4 속성에 뷰어 권한 부여 | `google-analytics-data` 패키지 필요 |
 | Clarity | Clarity 프로젝트 → 설정 → Data Export → 토큰 발급 | 최근 1~3일 데이터만 제공, 일 10회 호출 제한 → 매일 수집해 누적 |
+
+## 대량 등록 · 대량 소재 변경 (CSV)
+
+대시보드의 **캠페인 자동 세팅 탭** 하단에서 CSV 를 업로드하거나, CLI 로 실행합니다:
+
+```bash
+# 캠페인 대량 등록: 행 1개 = 캠페인 1개 (channels/keywords 는 | 로 구분)
+python cli.py bulk-launch --file config/bulk_campaigns_sample.csv --demo
+
+# 소재 대량 변경: 행 1개 = (채널, 캠페인 ID) 1건
+python cli.py bulk-creative --file config/bulk_creatives_sample.csv --demo
+```
+
+- **대량 등록 CSV** 필수 컬럼: `name, daily_budget, start_date, channels`
+  (선택: `end_date, landing_url, keywords, headline, description, image_url,
+  age_min, age_max, genders, locations`)
+- **소재 변경 CSV** 필수 컬럼: `channel, campaign_id, headline`
+  (선택: `description, image_url, landing_url`)
+- 대부분의 플랫폼은 소재 "수정" 대신 **새 소재 등록** 방식을 권장하므로,
+  소재 변경은 캠페인 하위 광고그룹(광고세트)마다 새 소재를 추가합니다.
+  기존 소재는 확인 후 각 광고관리자에서 중지하세요.
+- 구글 GDN 반응형 디스플레이 소재는 이미지 에셋 업로드가 선행돼야 해서
+  API 일괄 변경 대상에서 제외됩니다(검색 캠페인은 RSA 자동 등록 지원).
+- 모든 변경 이력은 `creative_updates` 테이블에 남고 대시보드에서 확인할 수 있습니다.
 
 ## 자동화 (매일 수집)
 
