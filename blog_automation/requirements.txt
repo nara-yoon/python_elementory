@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+pillow>=10.0
+python-dotenv>=1.0
+anthropic>=0.40      # AI 원고 생성 (선택 — 없으면 템플릿 모드)
+playwright>=1.44     # 자동 발행 (선택 — 없으면 HTML 복사 사용)

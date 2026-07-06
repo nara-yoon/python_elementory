@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>블로그 자동화 스튜디오</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <h1>✍️ 블로그 자동화 스튜디오</h1>
+      <div id="health" class="health"></div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 좌측: 설정 패널 -->
+    <section class="panel settings">
+      <h2>1. 원고 설정</h2>
+
+      <label for="keyword">키워드 <span class="req">*</span></label>
+      <input id="keyword" type="text" placeholder="예: 제주도 감성 카페, 갤럭시 S26 후기" />
+
+      <label for="category">산업군 카테고리 (톤 자동 적용)</label>
+      <select id="category"></select>
+
+      <label for="length">분량</label>
+      <select id="length">
+        <option value="short">짧게 (800~1,200자)</option>
+        <option value="medium" selected>보통 (1,500~2,200자)</option>
+        <option value="long">길게 (2,500~3,500자)</option>
+      </select>
+
+      <label for="extra">추가 요청사항 (선택)</label>
+      <textarea id="extra" rows="2" placeholder="예: 20대 여성 타깃, 가격 정보 강조"></textarea>
+
+      <h2>2. 이미지</h2>
+      <div class="radio-group">
+        <label><input type="radio" name="imageMode" value="generate" checked /> 커버 이미지 자동 생성</label>
+        <label><input type="radio" name="imageMode" value="folder" /> 폴더에서 키워드로 찾기</label>
+        <label><input type="radio" name="imageMode" value="none" /> 이미지 없음</label>
+      </div>
+      <div id="folderRow" class="hidden">
+        <label for="imageFolder">이미지 폴더 경로</label>
+        <input id="imageFolder" type="text" placeholder="비우면 assets/images 사용" />
+      </div>
+
+      <button id="btnGenerate" class="primary">🚀 원고 생성하기</button>
+      <div id="genStatus" class="status"></div>
+
+      <h2>3. 발행</h2>
+      <div class="publish-buttons">
+        <button id="btnNaver" class="naver" disabled>네이버 블로그 발행</button>
+        <button id="btnTistory" class="tistory" disabled>티스토리 발행</button>
+        <button id="btnCopy" disabled>📋 HTML 복사</button>
+        <button id="btnCopyText" disabled>📄 텍스트 복사</button>
+        <button id="btnExport" disabled>💾 HTML 파일로 저장</button>
+      </div>
+      <div id="pubStatus" class="status"></div>
+      <p class="hint">
+        자동 발행은 저장된 로그인 세션이 필요합니다. 세션이 없으면
+        <code>python -m app.publishers.naver</code> /
+        <code>python -m app.publishers.tistory</code> 로 먼저 로그인해 주세요.
+        자동 발행이 어려운 환경에서는 <b>HTML 복사</b> 후 에디터에 붙여넣으면
+        서식이 그대로 유지됩니다.
+      </p>
+    </section>
+
+    <!-- 우측: 미리보기 -->
+    <section class="panel preview">
+      <div class="preview-head">
+        <h2>미리보기</h2>
+        <span id="engineBadge" class="badge hidden"></span>
+      </div>
+      <input id="postTitle" class="post-title hidden" type="text" />
+      <div id="tags" class="tags"></div>
+      <div id="previewBody" class="preview-body">
+        <div class="empty">키워드를 입력하고 <b>원고 생성하기</b>를 눌러보세요.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
