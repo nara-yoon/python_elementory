@@ -1,0 +1,10 @@
+# 대시보드 실행에 필요한 기본 패키지
+streamlit>=1.36
+plotly>=5.22
+pandas>=2.0
+requests>=2.31
+PyYAML>=6.0
+
+# 실제 API 연동 시에만 필요 (데모 모드에서는 불필요)
+# google-ads>=24.0            # 구글 애즈
+# google-analytics-data>=0.18 # GA4

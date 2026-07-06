@@ -1,0 +1,45 @@
+# 통합 캠페인 템플릿
+# 이 파일 하나로 선택한 모든 채널에 캠페인을 자동 세팅합니다.
+#   python cli.py launch                # 이 템플릿으로 세팅
+#   python cli.py launch --demo         # 시뮬레이션(자격증명 불필요)
+
+name: "2026 여름 신제품 런칭"
+daily_budget: 100000              # 일 예산 (원)
+start_date: "2026-07-10"
+end_date: "2026-08-31"            # 비우면 종료일 없음
+
+# 세팅할 채널 선택:
+#   naver_search  네이버 검색광고(파워링크)
+#   naver_gfa     네이버 성과형 디스플레이(GFA)
+#   kakao_search  카카오 키워드광고
+#   kakao_moment  카카오모먼트
+#   google_search 구글 검색광고
+#   google_gdn    구글 디스플레이 네트워크
+#   meta          메타(페이스북/인스타그램)
+channels:
+  - naver_search
+  - naver_gfa
+  - kakao_search
+  - kakao_moment
+  - google_search
+  - google_gdn
+  - meta
+
+landing_url: "https://example.com/summer-launch"
+
+# 검색 채널용 키워드
+keywords:
+  - "여름 신상"
+  - "신제품 추천"
+  - "여름 세일"
+
+# 소재
+headline: "여름 신제품 런칭"
+description: "지금 구매하면 최대 30% 할인, 무료배송까지"
+image_url: "https://example.com/assets/summer-banner.jpg"   # 디스플레이 채널용
+
+# 타겟팅 (디스플레이 채널용)
+age_min: 25
+age_max: 44
+genders: []                       # ["male", "female"] 또는 빈 값(전체)
+locations: ["KR"]
