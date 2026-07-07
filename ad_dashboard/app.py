@@ -49,22 +49,37 @@ st.set_page_config(page_title="통합 광고 대시보드", page_icon="📊", la
 
 # ---------------------------------------------------------------- 데이터
 @st.cache_data(ttl=300)
-def load_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame,
+                        pd.DataFrame, pd.DataFrame]:
     conn = storage.connect()
     metrics = storage.load_metrics(conn)
+    hourly = storage.load_hourly(conn)
     ga4 = storage.load_ga4(conn)
     clarity = storage.load_clarity(conn)
     campaigns = storage.load_campaigns(conn)
     conn.close()
-    return metrics, ga4, clarity, campaigns
+    return metrics, hourly, ga4, clarity, campaigns
 
 
 def ensure_data() -> None:
     """DB가 비어 있으면 데모 데이터를 만들어 대시보드를 바로 체험하게 한다."""
-    metrics, *_ = load_all()
+    metrics, hourly, *_ = load_all()
     if metrics.empty:
         with st.spinner("처음 실행이라 데모 데이터를 생성하는 중입니다…"):
             collector.collect(demo=True)
+        load_all.clear()
+    elif hourly.empty and metrics["campaign_id"].str.startswith("demo_").all():
+        # 구버전 데모 DB에는 시간대 데이터가 없으므로 한 번 백필한다
+        from core import demo_data
+        from core.models import DailyMetric
+        rows = [DailyMetric(date=r.date.date(), channel=r.channel,
+                            campaign_id=r.campaign_id, campaign_name=r.campaign_name,
+                            impressions=r.impressions, clicks=r.clicks, cost=r.cost,
+                            conversions=r.conversions, revenue=r.revenue)
+                for r in metrics.itertuples()]
+        conn = storage.connect()
+        storage.upsert_hourly(conn, demo_data.generate_hourly(rows))
+        conn.close()
         load_all.clear()
 
 
@@ -95,7 +110,7 @@ def base_layout(fig: go.Figure, height: int = 360, unified: bool = False) -> go.
 
 
 ensure_data()
-metrics_df, ga4_df, clarity_df, campaigns_df = load_all()
+metrics_df, hourly_df, ga4_df, clarity_df, campaigns_df = load_all()
 metrics_df["채널"] = metrics_df["channel"].map(CHANNEL_LABELS)
 metrics_df["플랫폼"] = metrics_df["channel"].map(CHANNEL_PLATFORMS)
 
@@ -124,8 +139,9 @@ cur = metrics_df[(metrics_df["date"] >= start_ts)
 prev = metrics_df[(metrics_df["date"] >= prev_start_ts) & (metrics_df["date"] < start_ts)
                   & (metrics_df["channel"].isin(selected_channels))]
 
-tab_overview, tab_detail, tab_ga4, tab_clarity, tab_launch = st.tabs(
-    ["통합 개요", "채널·캠페인 상세", "GA4 분석", "Clarity UX", "캠페인 자동 세팅"])
+tab_overview, tab_hourly, tab_detail, tab_ga4, tab_clarity, tab_launch = st.tabs(
+    ["통합 개요", "시간대 분석", "채널·캠페인 상세", "GA4 분석", "Clarity UX",
+     "캠페인 자동 세팅"])
 
 # ================================================================ 통합 개요
 with tab_overview:
@@ -277,6 +293,89 @@ with tab_overview:
                 .rename(columns={"impressions": "노출", "clicks": "클릭",
                                  "cost": "광고비", "conversions": "전환",
                                  "revenue": "매출", "roas": "ROAS%"}),
+                use_container_width=True, hide_index=True)
+
+# ================================================================ 시간대 분석
+with tab_hourly:
+    hcur = hourly_df[(hourly_df["date"] >= start_ts)
+                     & (hourly_df["channel"].isin(selected_channels))]
+    if hcur.empty:
+        st.info("시간대 데이터가 없습니다. `python cli.py collect` (데모는 --demo) 를 "
+                "실행하세요. 카카오/구글/메타는 시간대 API를 지원하며, 네이버는 "
+                "시간대 분해를 API로 제공하지 않아 실데이터에서는 제외됩니다.")
+    else:
+        h_head, h_sel = st.columns([5, 1])
+        with h_sel:
+            h_metric = st.selectbox(
+                "지표", ["cost", "impressions", "clicks", "conversions"],
+                format_func={"cost": "광고비", "impressions": "노출",
+                             "clicks": "클릭", "conversions": "전환"}.get,
+                key="hourly_metric")
+        with h_head:
+            st.subheader("시간대 히트맵")
+
+        # ---- 피크 시간대 요약
+        by_hour = hcur.groupby("hour")[["cost", "conversions", "clicks"]].sum()
+        eff = (by_hour["conversions"] / by_hour["cost"].replace(0, pd.NA) * 10_000)
+        p1, p2, p3 = st.columns(3)
+        p1.metric("광고비 피크", f"{by_hour['cost'].idxmax()}시")
+        p2.metric("전환 피크", f"{by_hour['conversions'].idxmax()}시")
+        p3.metric("전환 효율 최고 (전환/만원)", f"{eff.idxmax()}시")
+
+        WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+        # 순차 램프(파랑, 밝음→어두움) — 히트맵은 단일 색상 계열만 사용
+        BLUE_SCALE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5",
+                      "#256abf", "#184f95", "#0d366b"]
+        hover_unit = {"cost": "원", "impressions": "", "clicks": "", "conversions": ""}
+
+        def heatmap(z, y_labels, title, hovertemplate) -> None:
+            st.markdown(f"**{title}**")
+            fig = go.Figure(go.Heatmap(
+                z=z, x=[f"{h}시" for h in range(24)], y=y_labels,
+                colorscale=BLUE_SCALE, xgap=2, ygap=2,
+                hovertemplate=hovertemplate + "<extra></extra>",
+                colorbar=dict(tickfont=dict(color=MUTED), thickness=12,
+                              outlinewidth=0),
+            ))
+            base_layout(fig, height=60 + 34 * len(y_labels))
+            fig.update_xaxes(showgrid=False, dtick=1)
+            fig.update_yaxes(showgrid=False, autorange="reversed")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # ---- 요일 x 시간 (하루 평균값)
+        tmp = hcur.groupby(["date", "hour"], as_index=False)[h_metric].sum()
+        tmp["weekday"] = tmp["date"].dt.weekday
+        pivot_wd = (tmp.groupby(["weekday", "hour"])[h_metric].mean()
+                    .unstack(fill_value=0).reindex(range(7), fill_value=0)
+                    .reindex(columns=range(24), fill_value=0))
+        heatmap(pivot_wd.values, WEEKDAYS,
+                "요일 × 시간대 (일평균)",
+                "%{y}요일 %{x}: %{z:,.0f}" + hover_unit[h_metric])
+
+        # ---- 채널 x 시간 (채널 내 비중 %) — 채널마다 규모가 달라 비중으로 비교
+        by_ch_hour = (hcur.groupby(["channel", "hour"])[h_metric].sum()
+                      .unstack(fill_value=0).reindex(columns=range(24), fill_value=0))
+        by_ch_hour = by_ch_hour.reindex(
+            [c for c in CHANNEL_ORDER if c in by_ch_hour.index])
+        share = by_ch_hour.div(by_ch_hour.sum(axis=1).replace(0, pd.NA), axis=0) * 100
+        heatmap(share.round(1).values,
+                [CHANNEL_LABELS[c] for c in share.index],
+                "채널 × 시간대 (각 채널 내 비중 %)",
+                "%{y} %{x}: %{z:.1f}%")
+        st.caption("채널 × 시간대는 채널별 규모 차이를 없애기 위해 각 채널 합계 대비 "
+                   "비중(%)으로 표시합니다. 진할수록 그 채널의 성과가 몰리는 시간대입니다.")
+
+        with st.expander("📋 시간대 원본 데이터 테이블 보기"):
+            table = (hcur.groupby("hour", as_index=False)
+                     [["impressions", "clicks", "cost", "conversions", "revenue"]]
+                     .sum())
+            table["시간대"] = table["hour"].map(lambda h: f"{h:02d}:00~{h:02d}:59")
+            st.dataframe(
+                table[["시간대", "impressions", "clicks", "cost",
+                       "conversions", "revenue"]]
+                .rename(columns={"impressions": "노출", "clicks": "클릭",
+                                 "cost": "광고비", "conversions": "전환",
+                                 "revenue": "매출"}),
                 use_container_width=True, hide_index=True)
 
 # ================================================================ 채널·캠페인 상세

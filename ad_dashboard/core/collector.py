@@ -46,6 +46,8 @@ def collect(days: int = 30, demo: bool = False, end: date | None = None) -> dict
         # 데모 모드: 90일치 일괄 생성
         metrics = demo_data.generate_metrics(end, days=max(days, 90))
         counts["demo_metrics"] = storage.upsert_metrics(conn, metrics)
+        counts["demo_hourly"] = storage.upsert_hourly(
+            conn, demo_data.generate_hourly(metrics))
         counts["demo_ga4"] = storage.upsert_ga4(conn, demo_data.generate_ga4(metrics))
         counts["demo_clarity"] = storage.upsert_clarity(
             conn, demo_data.generate_clarity(metrics))
@@ -58,6 +60,9 @@ def collect(days: int = 30, demo: bool = False, end: date | None = None) -> dict
             continue
         rows = connector.fetch_daily_metrics(start, end)
         counts[connector.channel] = storage.upsert_metrics(conn, rows)
+        hourly = connector.fetch_hourly_metrics(start, end)
+        if hourly:
+            counts[connector.channel + "_hourly"] = storage.upsert_hourly(conn, hourly)
 
     ga4 = Ga4Connector()
     if ga4.is_configured():

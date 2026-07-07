@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .models import ClarityDaily, DailyMetric, Ga4Daily
+from .models import ClarityDaily, DailyMetric, Ga4Daily, HourlyMetric
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "ad_dashboard.db"
 
@@ -26,6 +26,18 @@ CREATE TABLE IF NOT EXISTS metrics_daily (
     conversions REAL DEFAULT 0,
     revenue REAL DEFAULT 0,
     PRIMARY KEY (date, channel, campaign_id)
+);
+CREATE TABLE IF NOT EXISTS metrics_hourly (
+    date TEXT NOT NULL,
+    hour INTEGER NOT NULL,
+    channel TEXT NOT NULL,
+    campaign_id TEXT NOT NULL DEFAULT 'all',
+    impressions INTEGER DEFAULT 0,
+    clicks INTEGER DEFAULT 0,
+    cost REAL DEFAULT 0,
+    conversions REAL DEFAULT 0,
+    revenue REAL DEFAULT 0,
+    PRIMARY KEY (date, hour, channel, campaign_id)
 );
 CREATE TABLE IF NOT EXISTS ga4_daily (
     date TEXT NOT NULL,
@@ -93,6 +105,28 @@ def upsert_metrics(conn: sqlite3.Connection, rows: list[DailyMetric]) -> int:
     conn.executemany(sql, [r.to_row() for r in rows])
     conn.commit()
     return len(rows)
+
+
+def upsert_hourly(conn: sqlite3.Connection, rows: list[HourlyMetric]) -> int:
+    sql = """INSERT INTO metrics_hourly
+             (date, hour, channel, campaign_id,
+              impressions, clicks, cost, conversions, revenue)
+             VALUES (:date, :hour, :channel, :campaign_id,
+                     :impressions, :clicks, :cost, :conversions, :revenue)
+             ON CONFLICT(date, hour, channel, campaign_id) DO UPDATE SET
+                 impressions=excluded.impressions,
+                 clicks=excluded.clicks,
+                 cost=excluded.cost,
+                 conversions=excluded.conversions,
+                 revenue=excluded.revenue"""
+    conn.executemany(sql, [r.to_row() for r in rows])
+    conn.commit()
+    return len(rows)
+
+
+def load_hourly(conn: sqlite3.Connection) -> pd.DataFrame:
+    return pd.read_sql_query("SELECT * FROM metrics_hourly", conn,
+                             parse_dates=["date"])
 
 
 def upsert_ga4(conn: sqlite3.Connection, rows: list[Ga4Daily]) -> int:

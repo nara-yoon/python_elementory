@@ -14,7 +14,7 @@ import requests
 
 from core import settings
 from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
-                         LaunchResult)
+                         HourlyMetric, LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 BASE_URL = "https://apis.moment.kakao.com"
@@ -142,3 +142,38 @@ class KakaoMomentConnector(AdPlatformConnector):
                     revenue=float(metrics.get("convPurchaseP1d", 0)),
                 ))
         return out
+
+    def fetch_hourly_metrics(self, start: date, end: date) -> list[HourlyMetric]:
+        """timeUnit=HOUR 로 시간대별 성과를 가져와 채널 합계로 반환한다."""
+        if not self.is_configured():
+            return []
+        campaigns = self._request("GET", "/openapi/v4/campaigns") or {}
+        content = campaigns.get("content",
+                                campaigns if isinstance(campaigns, list) else [])
+        agg: dict[tuple, HourlyMetric] = {}
+        for c in content:
+            report = self._request("GET", "/openapi/v4/campaigns/report", params={
+                "campaignId": str(c["id"]),
+                "start": start.strftime("%Y%m%d"),
+                "end": end.strftime("%Y%m%d"),
+                "timeUnit": "HOUR",
+                "metricsGroup": "BASIC,PIXEL_SDK_CONVERSION",
+            })
+            for row in (report or {}).get("data", []):
+                dimensions = row.get("dimensions", {})
+                s = str(dimensions.get("start", row.get("start", "")))  # YYYYMMDDHH
+                if len(s) < 10:
+                    continue
+                day = date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+                hour = int(s[8:10])
+                metrics = row.get("metrics", {})
+                m = agg.get((day, hour))
+                if m is None:
+                    m = agg[(day, hour)] = HourlyMetric(
+                        date=day, hour=hour, channel=self.channel)
+                m.impressions += int(metrics.get("imp", 0))
+                m.clicks += int(metrics.get("click", 0))
+                m.cost += float(metrics.get("cost", 0))
+                m.conversions += float(metrics.get("convPurchase1d", 0))
+                m.revenue += float(metrics.get("convPurchaseP1d", 0))
+        return list(agg.values())

@@ -12,7 +12,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date
 
-from core.models import CampaignSpec, CreativeSpec, DailyMetric, LaunchResult
+from core.models import (CampaignSpec, CreativeSpec, DailyMetric, HourlyMetric,
+                         LaunchResult)
 
 
 class ConnectorError(RuntimeError):
@@ -36,6 +37,14 @@ class AdPlatformConnector(ABC):
     @abstractmethod
     def fetch_daily_metrics(self, start: date, end: date) -> list[DailyMetric]:
         """기간 내 일자별 x 캠페인별 성과를 통합 스키마로 반환한다."""
+
+    def fetch_hourly_metrics(self, start: date, end: date) -> list[HourlyMetric]:
+        """기간 내 시간대별(0~23시) 성과 — 히트맵용.
+
+        시간대 분해를 API로 제공하지 않는 플랫폼은 빈 목록을 반환한다
+        (기본 구현). 지원 플랫폼만 오버라이드한다.
+        """
+        return []
 
     def update_creative(self, campaign_id: str, creative: CreativeSpec) -> LaunchResult:
         """캠페인 하위 광고그룹들에 새 소재를 등록한다(대량 소재 변경용).

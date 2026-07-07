@@ -16,7 +16,7 @@ import requests
 
 from core import settings
 from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
-                         LaunchResult)
+                         HourlyMetric, LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 GRAPH_URL = "https://graph.facebook.com/v21.0"
@@ -193,4 +193,39 @@ class MetaAdsConnector(AdPlatformConnector):
                 break
             data = resp.json()
             rows = data.get("data", [])
+        return out
+
+    def fetch_hourly_metrics(self, start: date, end: date) -> list[HourlyMetric]:
+        """광고주 시간대 기준 시간별 성과를 가져온다."""
+        if not self.is_configured():
+            return []
+        data = self._request("GET", f"/act_{self.account_id}/insights", params={
+            "level": "account",
+            "time_range": json.dumps({"since": start.isoformat(),
+                                      "until": end.isoformat()}),
+            "time_increment": 1,
+            "breakdowns": "hourly_stats_aggregated_by_advertiser_time_zone",
+            "fields": "impressions,clicks,spend,actions,action_values",
+            "limit": 500,
+        })
+        out: list[HourlyMetric] = []
+        for row in data.get("data", []):
+            # 예: "13:00:00 - 13:59:59" → 13
+            hour_range = row.get(
+                "hourly_stats_aggregated_by_advertiser_time_zone", "00")
+            hour = int(str(hour_range)[:2])
+            conversions = sum(
+                float(a["value"]) for a in row.get("actions", [])
+                if a.get("action_type") in ("purchase", "omni_purchase"))
+            revenue = sum(
+                float(a["value"]) for a in row.get("action_values", [])
+                if a.get("action_type") in ("purchase", "omni_purchase"))
+            out.append(HourlyMetric(
+                date=date.fromisoformat(row["date_start"]),
+                hour=hour, channel=self.channel,
+                impressions=int(row.get("impressions", 0)),
+                clicks=int(row.get("clicks", 0)),
+                cost=float(row.get("spend", 0)),
+                conversions=conversions, revenue=revenue,
+            ))
         return out

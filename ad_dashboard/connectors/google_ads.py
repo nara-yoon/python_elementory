@@ -19,7 +19,7 @@ from datetime import date
 
 from core import settings
 from core.models import (CampaignSpec, Channel, CreativeSpec, DailyMetric,
-                         LaunchResult)
+                         HourlyMetric, LaunchResult)
 from .base import AdPlatformConnector, ConnectorError
 
 _REQUIRED = (
@@ -219,3 +219,34 @@ class GoogleAdsConnector(AdPlatformConnector):
                     revenue=float(row.metrics.conversions_value),
                 ))
         return out
+
+    def fetch_hourly_metrics(self, start: date, end: date) -> list[HourlyMetric]:
+        """segments.hour 로 시간대별 성과를 가져온다."""
+        if not self.is_configured():
+            return []
+        client = self._client()
+        ga_service = client.get_service("GoogleAdsService")
+        network_filter = ("SEARCH" if self.network == "SEARCH" else "DISPLAY")
+        query = f"""
+            SELECT segments.date, segments.hour,
+                   metrics.impressions, metrics.clicks, metrics.cost_micros,
+                   metrics.conversions, metrics.conversions_value
+            FROM campaign
+            WHERE segments.date BETWEEN '{start.isoformat()}' AND '{end.isoformat()}'
+              AND campaign.advertising_channel_type = '{network_filter}'
+        """
+        agg: dict[tuple, HourlyMetric] = {}
+        for batch in ga_service.search_stream(customer_id=self.customer_id, query=query):
+            for row in batch.results:
+                key = (row.segments.date, row.segments.hour)
+                m = agg.get(key)
+                if m is None:
+                    m = agg[key] = HourlyMetric(
+                        date=date.fromisoformat(row.segments.date),
+                        hour=int(row.segments.hour), channel=self.channel)
+                m.impressions += int(row.metrics.impressions)
+                m.clicks += int(row.metrics.clicks)
+                m.cost += row.metrics.cost_micros / 1_000_000
+                m.conversions += float(row.metrics.conversions)
+                m.revenue += float(row.metrics.conversions_value)
+        return list(agg.values())

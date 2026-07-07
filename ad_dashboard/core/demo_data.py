@@ -10,7 +10,7 @@ import math
 import random
 from datetime import date, timedelta
 
-from .models import ClarityDaily, DailyMetric, Ga4Daily, Channel
+from .models import ClarityDaily, DailyMetric, Ga4Daily, HourlyMetric, Channel
 
 # 채널별 (일평균 노출, CTR%, CPC원, 전환율%, 평균 객단가)
 _PROFILES: dict[str, tuple[int, float, int, float, int]] = {
@@ -70,6 +70,66 @@ def generate_metrics(end: date, days: int = 90) -> list[DailyMetric]:
                     revenue=round(revenue),
                 ))
                 day += timedelta(days=1)
+    return out
+
+
+# 채널 유형별 24시간 가중치 프로필 (0시~23시)
+_HOUR_PROFILES: dict[str, list[float]] = {
+    # 검색: 업무시간 피크
+    "search": [1, 1, 1, 1, 1, 2, 3, 5, 7, 9, 10, 10,
+               9, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2],
+    # 디스플레이: 저녁 피크
+    "display": [2, 1, 1, 1, 1, 1, 2, 3, 4, 5, 6, 7,
+                7, 6, 6, 6, 7, 8, 9, 10, 10, 9, 7, 4],
+    # 소셜(메타): 점심 + 심야 피크
+    "social": [3, 2, 1, 1, 1, 1, 2, 3, 4, 5, 6, 7,
+               8, 7, 6, 6, 7, 8, 9, 10, 10, 10, 8, 5],
+}
+
+_CHANNEL_PROFILE: dict[str, str] = {
+    Channel.NAVER_SEARCH: "search",
+    Channel.KAKAO_SEARCH: "search",
+    Channel.GOOGLE_SEARCH: "search",
+    Channel.NAVER_GFA: "display",
+    Channel.KAKAO_MOMENT: "display",
+    Channel.GOOGLE_GDN: "display",
+    Channel.META: "social",
+}
+
+
+def generate_hourly(metrics: list[DailyMetric]) -> list[HourlyMetric]:
+    """일별 지표를 채널 유형별 시간대 프로필로 배분해 시간대 데이터를 만든다.
+
+    캠페인은 합산해 채널 x 일자 x 시간 단위로 생성한다(히트맵 용도).
+    """
+    rng = random.Random(11)
+    # 채널 x 일자 합산
+    daily: dict[tuple, dict] = {}
+    for m in metrics:
+        key = (m.date, m.channel)
+        agg = daily.setdefault(key, {"impressions": 0, "clicks": 0, "cost": 0.0,
+                                     "conversions": 0.0, "revenue": 0.0})
+        agg["impressions"] += m.impressions
+        agg["clicks"] += m.clicks
+        agg["cost"] += m.cost
+        agg["conversions"] += m.conversions
+        agg["revenue"] += m.revenue
+
+    out: list[HourlyMetric] = []
+    for (day, channel), totals in daily.items():
+        profile = _HOUR_PROFILES[_CHANNEL_PROFILE[Channel(channel)]]
+        noisy = [w * rng.uniform(0.8, 1.2) for w in profile]
+        total_w = sum(noisy)
+        for hour in range(24):
+            share = noisy[hour] / total_w
+            out.append(HourlyMetric(
+                date=day, hour=hour, channel=channel,
+                impressions=int(totals["impressions"] * share),
+                clicks=int(totals["clicks"] * share),
+                cost=round(totals["cost"] * share),
+                conversions=round(totals["conversions"] * share, 2),
+                revenue=round(totals["revenue"] * share),
+            ))
     return out
 
 

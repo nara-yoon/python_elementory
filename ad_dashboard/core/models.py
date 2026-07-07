@@ -82,6 +82,29 @@ class DailyMetric:
 
 
 @dataclass
+class HourlyMetric:
+    """채널 x 일자 x 시간대(0~23) 단위 성과 — 히트맵용.
+
+    캠페인 구분 없이 채널 합계면 충분하므로 campaign_id 는 채널 합계일 때 "all".
+    """
+
+    date: date
+    hour: int                   # 0~23
+    channel: str
+    campaign_id: str = "all"
+    impressions: int = 0
+    clicks: int = 0
+    cost: float = 0.0
+    conversions: float = 0.0
+    revenue: float = 0.0
+
+    def to_row(self) -> dict:
+        d = asdict(self)
+        d["date"] = self.date.isoformat()
+        return d
+
+
+@dataclass
 class Ga4Daily:
     """GA4 일자 x 소스/매체 단위 지표."""
 
