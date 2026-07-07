@@ -1,0 +1,4 @@
+name,daily_budget,start_date,end_date,channels,landing_url,keywords,headline,description,image_url,age_min,age_max,genders,locations
+가을 시즌오프,80000,2026-09-01,2026-09-30,naver_search|kakao_search|google_search,https://example.com/fall-sale,가을 세일|시즌오프|가을 신상,가을 시즌오프 최대 50%,인기 상품 최대 50% 할인,,,,,KR
+브랜드 인지도,120000,2026-09-01,,naver_gfa|kakao_moment|google_gdn|meta,https://example.com/brand,,새로워진 브랜드를 만나보세요,지금 가입하면 웰컴 쿠폰 증정,https://example.com/assets/brand-banner.jpg,25,44,,KR
+리타겟팅 전환,50000,2026-09-05,2026-10-05,google_gdn|meta,https://example.com/cart,,장바구니 상품이 기다려요,오늘만 무료배송 + 5% 추가 할인,https://example.com/assets/retarget.jpg,20,54,,KR
